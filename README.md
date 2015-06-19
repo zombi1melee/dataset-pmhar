@@ -1,4 +1,5 @@
-##Human Activity Recognition - HAR
+##Human Activity Recognition project
  
- see <http://groupware.les.inf.puc-rio.br/har>
+see <http://zombi1melee.github.io/>
+
 
