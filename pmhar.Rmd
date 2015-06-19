@@ -1,0 +1,250 @@
+
+##Using Machine Learning in Predicting Exercise Motion
+###zombie1melee
+###June 12, 2015
+
+Due to the increasing number of wearable devices it is now more easier than ever to gather personal data in order to improve, monitor and derive feedback on your physical or mental health. With wearable devices set to increase in the future, competitions has led to ask questions such as which devices are the most accurate and most useful.  Questions like these and others are considered, within the framework of machine learning and predictive modeling.
+
+This project describes an approach that uses predictive modeling to answer the question of how well someone may perform an exercise.  Six healthy participates were asked to perform ten repetitions of a bicep curl, exactly and according to specific directions.  They were asked to perform this exercise in five different ways corresponding to different classes, labeled A-E.  The five different ways include, the proper way to exercise (A), throwing the elbows out front (B), lifting the dumbbell only halfway (C), lowering the dumbbell halfway (D), and throwing the hips in a front manner (E).  Class A is designated as the correct way to perform a bicep curl,  while other classes addressed familiar mistakes.  All the patrons were male who had minimum weight lifting experience. Starting with a problem, it is evident that the goal is to predict how well someone performs a bicep curl. 
+
+The original dataset can be downloaded at: http://groupware.les.inf.puc-rio.br/har. However, data was made available at:
+
+training data 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+test data
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r setOptions,cache=FALSE,include=FALSE}
+library("knitr")
+# set default to echo code.
+opts_chunk$set(echo=TRUE)
+```
+
+```{r packages,message=FALSE,warning=FALSE}
+library("data.table")
+library("VIM")
+library("e1071")
+library("caret")
+library("corrplot")
+```
+```{r getData,cache=TRUE}
+# Create directory to hold files and download files.
+dataDir <- paste(getwd(), "/data", sep = "")
+if(!file.exists(dataDir)) {
+    dir.create(dataDir)
+}
+# Download file into data directory.
+urlFiles <- c("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+              "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+fileNames <- c("./data/harTrain.csv", "./data/harTest.csv")
+datFile <- data.frame(urlFiles, fileNames)
+
+for (i in urlFiles) {
+    if(RCurl::url.exists(urlFiles[i])) {
+        if( !file.exists(fileNames[i])) {
+            download.file(urlFiles[i], destfile = fileNames[i], method = "curl")
+        } 
+    }
+    (downloadDate <- date())
+}
+list.files("./data")
+```
+```{r readTrain,cache=TRUE}
+# Data read.
+harTrain <- fread(fileNames[1], na.strings=c("NA", ""))
+# Hold out set of unseen data.
+harTest <- fread(fileNames[2], na.strings=c("NA", ""))
+``` 
+```{r setTypes, results="hide"}
+# Normally I would use a function to reduce all duplicated code.
+# Set types for training data and hold out data(harTest).
+# During exploration it was discovered that some variables contained "#DIV/0". I considered "#DIV/0!" as NA 
+# and set these variables accordingly.
+harTrain[,colnames(harTrain) := lapply(.SD, function(x) gsub("#DIV/0!", 0, x))]
+harTrain[,(8:159) := lapply(.SD,as.numeric),.SDcols = 8:159]
+harTrain[,classe := as.factor(classe)]
+
+harTest[,colnames(harTest) := lapply(.SD, function(x) gsub("#DIV/0!", 0, x))]
+harTest[,(8:159) := lapply(.SD,as.numeric),.SDcols = 8:159]
+# Results not shown to save space.
+```
+```{r dataExp,cache=TRUE}
+summary(harTrain)
+```
+The training dataset consisted of 19622 samples and 160 variables.
+The hold out dataset has the same number of variables but only 20 samples.  Most of the variables are numerical in nature.  The variable classe describes how well the bicep curl was performed.
+```{r harTrainNAs,cache=TRUE}
+# Summarize missing data for training and hold out set. 
+summary(aggr(harTrain, plot = FALSE)); summary(aggr(harTest, plot = FALSE))
+```
+How to deal with missing data is always a vital step in modeling. Depending on the number of missing values, there are a several options that can be taken to mitigate to effects of missing data.  
+```{r missingTrain}
+s <- summary(aggr(harTrain, plot = FALSE))
+varName <- s$missings[which(s$missings$Count >= 19200),]$Variable
+# Remove variables that contain missing data and other valueless columns.
+exclude <- c("V1","user_name","cvtd_timestamp","raw_timestamp_part_1","num_window", "raw_timestamp_part_2","new_window")
+exclude <- union(exclude, varName); colNames <- setdiff(names(harTrain), exclude)
+harTrain <- harTrain[,colNames, with = FALSE]
+summary(aggr(harTrain, plot = FALSE))
+```
+
+```{r missingTest,results="hide"}
+# Remove NAs from hold out dataset
+s <- summary(aggr(harTest, plot = FALSE))
+varName <- s$missings[which(s$missings$Count >= 20),]$Variable
+exclude <- c("V1","user_name","cvtd_timestamp","raw_timestamp_part_1","num_window", "raw_timestamp_part_2","new_window")
+exclude <- union(exclude, varName); colNames <- setdiff(names(harTest), exclude)
+harTest <- harTest[,colNames, with = FALSE]
+# Results not shown to save space.
+```
+```{r sumTest}
+summary(aggr(harTest, plot = FALSE))
+```
+```{r skewData}
+dim(harTest); dim(harTrain)
+# To handle skewness, BoxCox transformations were applied. 
+skewValues <- apply(harTrain[,1:52, with = FALSE], 2, skewness)
+# caret's preProcess function transforms skewness.
+ppTrain <- preProcess(harTrain[,1:52, with = FALSE], method = "BoxCox")
+ppTest <- preProcess(harTest[,1:52, with = FALSE], method = "BoxCox")
+# Apply transformations, output as data.frame.
+harTrainTr <- predict(ppTrain, harTrain)
+harTestTr <- predict(ppTest, harTest)
+```
+```{r findCorr, cache=TRUE}
+# Identify highly correlated variables for removal.
+harCorr <- cor(harTrainTr[,-53])
+highCorr <- findCorrelation(harCorr, .75) # .75 - .99
+harAct <- harTrainTr[, -highCorr]
+testSet <-  harTestTr[-highCorr] # Test set of hold out data/validation set.
+dim(harAct)
+str(testSet)
+```
+```{r zeroVar}
+# Non zero variance variables identified.
+nearZeroVar(harAct)
+```
+```{r dataSplit}
+# Split the data into a training set and test set.  The training set measures performance of the different 
+# models  while the test set is measures metrics such as accuracy.  Stratified random samples splits data 
+# based upon classe variable.
+indexTrain <- createDataPartition(harAct$classe, p = 3/4, list = FALSE)
+humArrTrain <- harAct[ indexTrain, ]
+humArrTest <- harAct[ -indexTrain, ] # Test set/hold back set.
+trainVar  <- humArrTrain[,-33]; trainClass <- humArrTrain$classe
+```
+```{r foldSel}
+# Create fold selection for cross validation.
+foldIdx <- createFolds(trainClass, returnTrain = TRUE)
+# Train control set to 3 repetitions repeated cross validation.
+cvCtrl <- trainControl(method = "repeatedcv", index = foldIdx, classProbs = TRUE, savePredictions = TRUE, 
+                       repeats = 3) 
+```
+Multiple models were used to fit the data which include support vector machine, random forests, knn, neural networks, and rpart/CART.  The choice of model selection was loosely based upon computational speed and model interpretation.  Spatial sign was applied to a neural network.
+```{r SVM, message=FALSE,cache=TRUE}
+# SVM fit
+# Tune model.
+svmT <- train(trainClass ~ ., data = humArrTrain, method = "svmRadial",
+                preProc = c("center", "scale"), tuneLength = 8,
+                trControl = cvCtrl)
+svmT
+svmT$finalModel
+```
+```{r RandomForestT,cache=TRUE,message=FALSE}
+# RandomForest fit
+mtry <- randomForest::tuneRF(trainVar, trainClass, ntreeTry = 500, plot=FALSE, trace=FALSE)
+mtry
+```
+```{r RandomForest,cache=TRUE}
+nmtry <- c(5, 10, 15, 20)
+rfT <- train(x = trainVar, y = trainClass,
+              method = "rf", ntree = 500, # probable should be 1000
+              tuneGrid = data.frame(mtry = nmtry), importance = TRUE,
+              trControl = cvCtrl)
+rfT
+confusionMatrix(rfT, norm = "average")
+varImp(rfT, scale = FALSE, competes = FALSE)
+```
+```{r rpart, message=FALSE,cache=TRUE}
+# rpart fit
+rpT <- train(x = trainVar, y = trainClass,
+                  method = "rpart", tuneLength = 20, trControl = cvCtrl)
+rpT
+rpT$finalModel
+rpVarImp <- varImp(rpT, scale = FALSE, competes = FALSE)
+rpVarImp
+```
+```{r knn,message=FALSE,cache=TRUE}
+# knn fit
+knnT <- train(trainClass ~., data = humArrTrain, method = "knn",
+                  preProc = c("center", "scale"),
+                  tuneGrid = data.frame(.k = 4*(0:15) + 3),
+                  trControl = cvCtrl)
+knnT
+knnT$finalModel
+#names(knnT)
+```
+```{r nn,message=FALSE,cache=TRUE}
+# nn 
+eGrid <- expand.grid(.decay = c(0, 0.01, 0.1), .size = c(1:3))
+nnT <- train(trainClass ~ ., data = humArrTrain,
+            method = "nnet",
+            preProc = c("center", "scale", "spatialSign"),
+            trace = FALSE,
+            maxit = 500,
+            tuneGrid = eGrid,
+            trControl = cvCtrl)
+nnT
+```
+```{r diagnostics,echo=TRUE,cache=TRUE,fig.height=2.8, fig.width=4.5}
+selectModels <- list("svm" = svmT, "RandomForest" = rfT, "rpart" = rpT, "knn" = knnT, "Neural Networks" = nnT)
+resamp <- resamples(selectModels)
+# Figure 2: parallel coordinate plot displays cross validation for each model.  The top models are RandomForest and KNN with an average accuracy range from 0.7 to close to 1. 
+
+parallelplot.resamples(resamp, metric = "Accuracy")
+summary(resamp)
+# Difference in sample averages.
+modelDifferences <- diff(resamp)
+summary(modelDifferences)
+# Model differences based upon paired t-test.
+modelDifferences$statistics$Accuracy
+```
+```{r pred,cache=TRUE,echo=TRUE,message=FALSE}
+# svm predictions
+svmClass <- predict(svmT, humArrTest)
+str(svmClass)
+# class probabilities
+svmProbs <- predict(svmT, humArrTest, type = "prob"); head(svmProbs)
+confusionMatrix(svmClass, humArrTest$classe)
+# rpart predictions
+rpPred <- predict(rpT, humArrTest); confusionMatrix(rpPred, humArrTest$classe)
+# random forest predictions and confusion matrix
+rfTPred <- predict(rfT, humArrTest); confusionMatrix(rfTPred, humArrTest$classe)
+# knn predictions and confusion matrix.
+knnProbs <- predict(knnT, humArrTest, type = "prob"); head(knnProbs)
+knnPred <- predict(knnT, humArrTest); confusionMatrix(knnPred, humArrTest$classe)
+# nnet
+nnPred <- predict(nnT, humArrTest); confusionMatrix(nnPred, humArrTest$classe)
+```
+Out of sample error for each model: SVM, CART, RandomForest, KNN, NN; 0.742, 0.7461, 0.9949, 1, 1, respectively. 
+```{r testSet,echo=TRUE,cache=TRUE}
+# Prediction on unseen data using RandomForest.  This model was chosen based upon accuracy and 
+# parameter settings. 
+testPred <- predict(rfT, testSet[,-33])
+str(testPred)
+testPred
+```
+References:
+Kuhn M (2008). "Building Predictive Models in R Using the caret Package."
+Journal of Statistical Software, 28(5).
+
+Kuhn M (2010). "The caret Package Homepage."" URL http://caret.r-forge.
+r-project.org/.
+
+Serneels S, Nolf ED, Espen PV (2006)."Spatial Sign Pre-processing: A Simple
+Way to Impart Moderate Robustness to Multivariate Estimators." Journal
+of Chemical Information and Modeling,
+
+
+
