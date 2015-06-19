@@ -1,6 +1,6 @@
 
 ##Using Machine Learning in Predicting Exercise Motion
-###zombie1melee
+###zombi1melee
 ###June 12, 2015
 
 Due to the increasing number of wearable devices it is now more easier than ever to gather personal data in order to improve, monitor and derive feedback on your physical or mental health. With wearable devices set to increase in the future, competitions has led to ask questions such as which devices are the most accurate and most useful.  Questions like these and others are considered, within the framework of machine learning and predictive modeling.
