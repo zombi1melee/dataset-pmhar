@@ -20,7 +20,6 @@ library("knitr")
 # set default to echo code.
 opts_chunk$set(echo=TRUE)
 ```
-
 ```{r packages,message=FALSE,warning=FALSE}
 library("data.table")
 library("VIM")
@@ -53,12 +52,12 @@ list.files("./data")
 ```{r readTrain,cache=TRUE}
 # Data read.
 harTrain <- fread(fileNames[1], na.strings=c("NA", ""))
-# Hold out set of unseen data.
+# Test case data.
 harTest <- fread(fileNames[2], na.strings=c("NA", ""))
 ``` 
 ```{r setTypes, results="hide"}
 # Normally I would use a function to reduce all duplicated code.
-# Set types for training data and hold out data(harTest).
+# Set types for training data and test case.
 # During exploration it was discovered that some variables contained "#DIV/0". I considered "#DIV/0!" as NA 
 # and set these variables accordingly.
 harTrain[,colnames(harTrain) := lapply(.SD, function(x) gsub("#DIV/0!", 0, x))]
@@ -75,7 +74,7 @@ summary(harTrain)
 The training dataset consisted of 19622 samples and 160 variables.
 The hold out dataset has the same number of variables but only 20 samples.  Most of the variables are numerical in nature.  The variable classe describes how well the bicep curl was performed.
 ```{r harTrainNAs,cache=TRUE}
-# Summarize missing data for training and hold out set. 
+# Summarize missing data for training and test case. 
 summary(aggr(harTrain, plot = FALSE)); summary(aggr(harTest, plot = FALSE))
 ```
 How to deal with missing data is always a vital step in modeling. Depending on the number of missing values, there are a several options that can be taken to mitigate to effects of missing data.  
@@ -90,7 +89,7 @@ summary(aggr(harTrain, plot = FALSE))
 ```
 
 ```{r missingTest,results="hide"}
-# Remove NAs from hold out dataset
+# Remove NAs from test case
 s <- summary(aggr(harTest, plot = FALSE))
 varName <- s$missings[which(s$missings$Count >= 20),]$Variable
 exclude <- c("V1","user_name","cvtd_timestamp","raw_timestamp_part_1","num_window", "raw_timestamp_part_2","new_window")
@@ -117,7 +116,7 @@ harTestTr <- predict(ppTest, harTest)
 harCorr <- cor(harTrainTr[,-53])
 highCorr <- findCorrelation(harCorr, .75) # .75 - .99
 harAct <- harTrainTr[, -highCorr]
-testSet <-  harTestTr[-highCorr] # Test set of hold out data/validation set.
+testSet <-  harTestTr[-highCorr] # Test case set.
 dim(harAct)
 str(testSet)
 ```
@@ -131,15 +130,14 @@ nearZeroVar(harAct)
 # based upon classe variable.
 indexTrain <- createDataPartition(harAct$classe, p = 3/4, list = FALSE)
 humArrTrain <- harAct[ indexTrain, ]
-humArrTest <- harAct[ -indexTrain, ] # Test set/hold back set.
+humArrTest <- harAct[ -indexTrain, ] # Test set of unseen data.
 trainVar  <- humArrTrain[,-33]; trainClass <- humArrTrain$classe
 ```
 ```{r foldSel}
 # Create fold selection for cross validation.
-foldIdx <- createFolds(trainClass, returnTrain = TRUE)
-# Train control set to 3 repetitions repeated cross validation.
-cvCtrl <- trainControl(method = "repeatedcv", index = foldIdx, classProbs = TRUE, savePredictions = TRUE, 
-                       repeats = 3) 
+foldIdx <- createMultiFolds(trainClass, times = 5)
+# Train control set to repeated cross validation.
+cvCtrl <- trainControl(method = "repeatedcv", index = foldIdx, classProbs = TRUE, savePredictions = TRUE, repeats = 3) 
 ```
 Multiple models were used to fit the data which include support vector machine, random forests, knn, neural networks, and rpart/CART.  The choice of model selection was loosely based upon computational speed and model interpretation.  Spatial sign was applied to a neural network.
 ```{r SVM, message=FALSE,cache=TRUE}
@@ -201,7 +199,6 @@ nnT
 selectModels <- list("svm" = svmT, "RandomForest" = rfT, "rpart" = rpT, "knn" = knnT, "Neural Networks" = nnT)
 resamp <- resamples(selectModels)
 # Figure 2: parallel coordinate plot displays cross validation for each model.  The top models are RandomForest and KNN with an average accuracy range from 0.7 to close to 1. 
-
 parallelplot.resamples(resamp, metric = "Accuracy")
 summary(resamp)
 # Difference in sample averages.
@@ -211,6 +208,8 @@ summary(modelDifferences)
 modelDifferences$statistics$Accuracy
 ```
 ```{r pred,cache=TRUE,echo=TRUE,message=FALSE}
+# Out of sample errors and other statistics.
+set.seed(8888)
 # svm predictions
 svmClass <- predict(svmT, humArrTest)
 str(svmClass)
@@ -227,13 +226,31 @@ knnPred <- predict(knnT, humArrTest); confusionMatrix(knnPred, humArrTest$classe
 # nnet
 nnPred <- predict(nnT, humArrTest); confusionMatrix(nnPred, humArrTest$classe)
 ```
-Out of sample error for each model: SVM, CART, RandomForest, KNN, NN; 0.742, 0.7461, 0.9949, 1, 1, respectively. 
+```{r allTrainingData,cache=TRUE}
+# Build model of all training data.
+set.seed(8888)
+nmtry <- 5
+trainVar <- harAct[,1:32]
+trainClass <- harAct$classe
+foldIdx <- createMultiFolds(trainClass, times = 5)
+# Train control set to repeated cross validation.
+cvCtrl <- trainControl(method = "repeatedcv", index = foldIdx, 
+                       classProbs = TRUE, savePredictions = TRUE,
+                       repeats = 3) 
+rfFinal <- train(x = trainVar, y = trainClass,
+             method = "rf",
+             ntree = 500,
+             tuneGrid = data.frame(mtry = nmtry),
+             trControl = cvCtrl)
+rfFinal
+```
+
 ```{r testSet,echo=TRUE,cache=TRUE}
-# Prediction on unseen data using RandomForest.  This model was chosen based upon accuracy and 
+# Apply Random Forest to test case data.  This model was chosen based upon accuracy and 
 # parameter settings. 
-testPred <- predict(rfT, testSet[,-33])
-str(testPred)
-testPred
+testPredFl <- predict(rfFinal, testSet[,-33])
+str(testPredFl)
+testPredFl
 ```
 References:
 Kuhn M (2008). "Building Predictive Models in R Using the caret Package."
