@@ -72,12 +72,12 @@ harTest[,(8:159) := lapply(.SD,as.numeric),.SDcols = 8:159]
 summary(harTrain)
 ```
 The training dataset consisted of 19622 samples and 160 variables.
-The hold out dataset has the same number of variables but only 20 samples.  Most of the variables are numerical in nature.  The variable classe describes how well the bicep curl was performed.
+The test case dataset has the same number of variables but only 20 samples.  Most of the variables are numeric in nature.  The variable classe describes how well the bicep curl was performed.
 ```{r harTrainNAs,cache=TRUE}
 # Summarize missing data for training and test case. 
 summary(aggr(harTrain, plot = FALSE)); summary(aggr(harTest, plot = FALSE))
 ```
-How to deal with missing data is always a vital step in modeling. Depending on the number of missing values, there are a several options that can be taken to mitigate to effects of missing data.  
+How to deal with missing data is always a vital step in modeling. Depending on the number of missing values, there are a several options that can be taken to mitigate the effects of missing data. Since the number of missing observations, columnwise, exceeded 95%, the choice was made to remove specific variables.  
 ```{r missingTrain}
 s <- summary(aggr(harTrain, plot = FALSE))
 varName <- s$missings[which(s$missings$Count >= 19200),]$Variable
@@ -226,6 +226,7 @@ knnPred <- predict(knnT, humArrTest); confusionMatrix(knnPred, humArrTest$classe
 # nnet
 nnPred <- predict(nnT, humArrTest); confusionMatrix(nnPred, humArrTest$classe)
 ```
+I expect the out of sample error for support vector machine, CART, random forest, KNN, neural networks; are 0.7412, 0.7524, 0.9933 , 1, 1, respectively. 
 ```{r allTrainingData,cache=TRUE}
 # Build model of all training data.
 set.seed(8888)

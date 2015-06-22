@@ -483,7 +483,7 @@ harTest[,(8:159) := lapply(.SD,as.numeric),.SDcols = 8:159]
 ##  3rd Qu.:  -73.0   3rd Qu.: 737.0   3rd Qu.: 653.0   E:3607  
 ##  Max.   :  672.0   Max.   :1480.0   Max.   :1090.0           
 ## </code></pre>
-<p>The training dataset consisted of 19622 samples and 160 variables. The hold out dataset has the same number of variables but only 20 samples. Most of the variables are numerical in nature. The variable classe describes how well the bicep curl was performed.</p>
+<p>The training dataset consisted of 19622 samples and 160 variables. The test case dataset has the same number of variables but only 20 samples. Most of the variables are numeric in nature. The variable classe describes how well the bicep curl was performed.</p>
 <pre class="r"><code># Summarize missing data for training and test case. 
 summary(aggr(harTrain, plot = FALSE)); summary(aggr(harTest, plot = FALSE))</code></pre>
 <pre><code>## 
@@ -826,7 +826,7 @@ summary(aggr(harTrain, plot = FALSE)); summary(aggr(harTest, plot = FALSE))</cod
 ##  0:0:0:0:0:0:0:0:0:0:0:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:0:0:0:0:0:0:0:0:0:0:0:0:0:1:1:1:1:1:1:1:1:1:1:0:0:0:0:0:0:0:0:0:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:0:0:0:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:0:1:1:1:1:1:1:1:1:1:1:0:0:0:0:0:0:0:0:0:0:0:0:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:0:1:1:1:1:1:1:1:1:1:1:0:0:0:0:0:0:0:0:0:0
 ##  Count Percent
 ##     20     100</code></pre>
-<p>How to deal with missing data is always a vital step in modeling. Depending on the number of missing values, there are a several options that can be taken to mitigate to effects of missing data.</p>
+<p>How to deal with missing data is always a vital step in modeling. Depending on the number of missing values, there are a several options that can be taken to mitigate the effects of missing data. Since the number of missing observations, columnwise, exceeded 95%, the choice was made to remove specific variables.</p>
 <pre class="r"><code>s &lt;- summary(aggr(harTrain, plot = FALSE))
 varName &lt;- s$missings[which(s$missings$Count &gt;= 19200),]$Variable
 # Remove variables that contain missing data and other valueless columns.
@@ -1771,6 +1771,7 @@ nnPred &lt;- predict(nnT, humArrTest); confusionMatrix(nnPred, humArrTest$classe
 ## Detection Rate         0.2845   0.1935   0.1743   0.1639   0.1837
 ## Detection Prevalence   0.2845   0.1935   0.1743   0.1639   0.1837
 ## Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000</code></pre>
+<p>I expect the out of sample error for support vector machine, CART, random forest, KNN, neural networks; are 0.7412, 0.7524, 0.9933 , 1, 1, respectively.</p>
 <pre class="r"><code># Build model of all training data.
 set.seed(8888)
 nmtry &lt;- 5
