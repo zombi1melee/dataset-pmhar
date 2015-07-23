@@ -1,7 +1,6 @@
 
 ##Using Machine Learning in Predicting Exercise Motion
 ###zombi1melee
-###June 12, 2015
 
 Due to the increasing number of wearable devices it is now more easier than ever to gather personal data in order to improve, monitor and derive feedback on your physical or mental health. With wearable devices set to increase in the future, competitions has led to ask questions such as which devices are the most accurate and most useful.  Questions like these and others are considered, within the framework of machine learning and predictive modeling.
 
@@ -21,11 +20,14 @@ library("knitr")
 opts_chunk$set(echo=TRUE)
 ```
 ```{r packages,message=FALSE,warning=FALSE}
+system("hostname")
+sessionInfo()
 library("data.table")
 library("VIM")
 library("e1071")
 library("caret")
 library("corrplot")
+date()
 ```
 ```{r getData,cache=TRUE}
 # Create directory to hold files and download files.
@@ -140,7 +142,7 @@ foldIdx <- createMultiFolds(trainClass, times = 5)
 cvCtrl <- trainControl(method = "repeatedcv", index = foldIdx, classProbs = TRUE, savePredictions = TRUE, repeats = 3) 
 ```
 Multiple models were used to fit the data which include support vector machine, random forests, knn, neural networks, and rpart/CART.  The choice of model selection was loosely based upon computational speed and model interpretation.  Spatial sign was applied to a neural network.
-```{r SVM, message=FALSE,cache=TRUE}
+```{r SVM,message=FALSE,cache=TRUE}
 # SVM fit
 # Tune model.
 svmT <- train(trainClass ~ ., data = humArrTrain, method = "svmRadial",
